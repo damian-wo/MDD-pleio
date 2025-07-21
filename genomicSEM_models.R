@@ -54,7 +54,7 @@ MDD ~ F_gastro
 model_gastro <-usermodel(LDSCoutput, estimation = "DWLS", model = modelgastro, CFIcalc = TRUE, std.lv = FALSE, imp_cov = TRUE)
 
 
-## Gastro-MDD Single Factor Model ## 
+## Immune-MDD Single Factor Model ## 
 
 ## Load in LDSC results 
 load("LDSCoutput_IM.RData")
