@@ -1,0 +1,13 @@
+#!/bin/bash
+#PBS -N mixer_results
+#PBS -l mem=5GB,walltime=04:00:00,ncpus=1
+
+cd ./MIXER_GSA
+
+module load singularity/3.7.1
+export MIXER_SIF=./singularity/gsa-mixer-2.1.1.sif
+export MIXER_PY="singularity exec --home /software/gsa-mixer/gsa-mixer-2.1.1:/home ${MIXER_SIF} python /tools/mixer/precimed/mixer.py"
+
+${MIXER_PY} split_sumstats \
+    --trait1-file ./sumstats/MDD_clean.tsv \
+    --out ./splitsumstats/MDD_Factor.chr@.sumstats.gz

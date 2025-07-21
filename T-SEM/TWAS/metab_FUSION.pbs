@@ -1,0 +1,36 @@
+#PBS -N Metab_TWAS
+#PBS -l mem=3GB
+#PBS -l walltime=10:00:00
+#PBS -M damian.woodward@qimrberghofer.edu.au
+
+cd ./12_TWAS
+
+TISSUE=($(awk -v var=$PBS_ARRAY_INDEX 'NR==var' tissues.txt))
+
+module load R/3.5.1
+
+declare -A GWASN_VALUES=( 
+["MSYN"]=291107
+["HDL"]=1320016
+["GSD"]=550437
+["TG"]=1320016
+["T2D"]=1812017
+["MDD"]=1035760
+)
+
+for TRAIT in MSYN HDL GSD TG T2D MDD; do
+	GWASN=${GWASN_VALUES[$TRAIT]}
+
+	for i in {1..22}; do
+  Rscript FUSION.assoc_test.R \
+  --sumstats ./2_metab/${TRAIT}.sumstats.gz \
+  --weights ./GTEx_EUR/GTExv8.EUR.${TISSUE}.pos \
+  --weights_dir ./GTEx_EUR \
+  --ref_ld_chr ./LDREF/1000G.EUR. \
+  --chr $i \
+  --GWASN $GWASN \
+  --out ./2_metab/${TRAIT}_${TISSUE}.chr$i.dat 
+ 
+done
+done
+

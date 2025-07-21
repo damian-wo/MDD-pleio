@@ -1,0 +1,17 @@
+#!/bin/bash
+#PBS -N BIN
+#PBS -l mem=20GB,walltime=04:00:00,ncpus=1
+
+cd ./MIXER_GSA
+
+module load singularity/3.7.1
+export MIXER_SIF=./singularity/gsa-mixer-2.1.1.sif
+export MIXER_PY="singularity exec --home ./gsa-mixer/gsa-mixer-2.1.1:/home ${MIXER_SIF} python /tools/mixer/precimed/mixer.py"
+
+for chri in {1..22}; do ${MIXER_PY} plsa \
+      --bim-file ./mixer/reference/ldsc/1000G_EUR_Phase3_plink/1000G.EUR.QC.@.bim \
+      --ld-file ./mixer/reference/ldsc/1000G_EUR_Phase3_plink/1000G.EUR.QC.@.run4.ld \
+      --use-complete-tag-indices \
+      --chr2use ${chri} \
+      --savelib-file ./mixer/reference/ldsc/1000G_EUR_Phase3_plink/1000G.EUR.QC.@.bin \
+      --out ./mixer/reference/ldsc/1000G_EUR_Phase3_plink/1000G.EUR.QC.@; done

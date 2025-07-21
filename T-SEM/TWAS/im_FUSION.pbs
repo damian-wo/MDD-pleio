@@ -1,0 +1,35 @@
+#PBS -N IM_TWAS
+#PBS -l mem=3GB
+#PBS -l walltime=10:00:00
+#PBS -M damian.woodward@qimrberghofer.edu.au
+
+cd ./12_TWAS
+
+TISSUE=($(awk -v var=$PBS_ARRAY_INDEX 'NR==var' tissues.txt))
+
+module load R/3.5.1
+
+declare -A GWASN_VALUES=( 
+["AD"]=864982
+["ASTH"]=303859
+["MS"]=41505
+["IBD"]=59957
+["MDD"]=1035760
+)
+
+for TRAIT in AD ASTH MS IBD MDD; do
+	GWASN=${GWASN_VALUES[$TRAIT]}
+
+for i in {1..22}; do
+  Rscript FUSION.assoc_test.R \
+  --sumstats ./4_im/${TRAIT}.sumstats.gz \
+  --weights ./GTEx_EUR/GTExv8.EUR.${TISSUE}.pos \
+  --weights_dir ./12_TWAS/GTEx_EUR \
+  --ref_ld_chr ./LDREF/1000G.EUR. \
+  --chr $i \
+  --GWASN $GWASN \
+  --out ./4_im/${TRAIT}_${TISSUE}.chr$i.dat 
+ 
+done
+done
+

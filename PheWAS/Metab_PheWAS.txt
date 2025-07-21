@@ -1,0 +1,266 @@
+##########################################
+## Perform PheWAS on all Metab-MDD loci ##
+##########################################
+
+WITH Metab_variants AS (
+  -- Step 1: Link rsID from MDD.Metab to the variants table
+  SELECT
+    lc.rsID,
+    variants.chr_id AS chr,
+    variants.position AS pos,
+    variants.ref_allele,
+    variants.alt_allele,
+    variants.rs_id
+  FROM
+    `lofty-layout-385803.MDD.Metab` AS lc
+  JOIN
+    `bigquery-public-data.open_targets_genetics.variants` AS variants
+  ON
+    lc.rsID = variants.rs_id  -- Linking by rsID 
+),
+-- Step 2: Link Overlap_variants to the variant_disease (vd) table by chromosome, position, and alleles
+Filtered_vd AS (
+  SELECT DISTINCT
+    ov.rsID,
+    vd.trait_reported,
+    vd.pmid
+  FROM
+    Metab_variants AS ov
+  JOIN
+    `bigquery-public-data.open_targets_genetics.variant_disease` AS vd
+  ON (
+    (vd.lead_chrom = ov.chr AND vd.lead_pos = ov.pos AND vd.lead_ref = ov.ref_allele AND vd.lead_alt = ov.alt_allele) 
+    OR
+    (vd.tag_chrom = ov.chr AND vd.tag_pos = ov.pos AND vd.tag_ref = ov.ref_allele AND vd.tag_alt = ov.alt_allele)
+  )
+  WHERE
+   EXISTS (
+      SELECT 1
+      FROM UNNEST(vd.ancestry_initial.list) AS ancestry
+      WHERE LOWER(ancestry.element) LIKE 'european%'
+    )
+    AND vd.pval < 5e-8  -- P-value threshold
+)
+-- Step 3: Return the final result
+SELECT * FROM Filtered_vd
+
+#########################################################################
+## Perform PheWAS on Metab-MDD loci previously uncharacterised for MDD ##
+#########################################################################
+
+-- Step 1: Identify MDD loci to exclude (known loci with MDD traits)
+WITH MDD_loci AS (
+  SELECT DISTINCT lc.GenomicLocus
+  FROM
+    `bigquery-public-data.open_targets_genetics.variant_disease` AS vd
+  JOIN
+    `bigquery-public-data.open_targets_genetics.variants` AS variants
+  ON
+    CONCAT(vd.lead_chrom, '_', vd.lead_pos, '_', vd.lead_ref, '_', vd.lead_alt) = 
+    CONCAT(variants.chr_id, '_', variants.position, '_', variants.ref_allele, '_', variants.alt_allele)
+    OR
+    CONCAT(vd.tag_chrom, '_', vd.tag_pos, '_', vd.tag_ref, '_', vd.tag_alt) = 
+    CONCAT(variants.chr_id, '_', variants.position, '_', variants.ref_allele, '_', variants.alt_allele)
+  JOIN
+    `lofty-layout-385803.MDD.Metab` AS lc
+  ON
+    variants.position_b37 BETWEEN lc.start AND lc.end  
+    AND CAST(variants.chr_id_b37 AS STRING) = CAST(lc.chr AS STRING)
+  WHERE
+    (LOWER(vd.trait_reported) LIKE '%major depressive disorder%'
+    OR LOWER(vd.trait_reported) LIKE '%depression%'
+    OR LOWER(vd.trait_reported) LIKE '%depressive symptoms%'
+    OR LOWER(vd.trait_reported) LIKE '%depressed%')
+    AND EXISTS (
+      SELECT 1
+      FROM UNNEST(vd.ancestry_initial.list) AS ancestry
+      WHERE LOWER(ancestry.element) LIKE 'european%'
+    )
+),
+
+-- Step 2: Filter the original dataset to only include novel loci (excluding known MDD loci)
+Novel_loci AS (
+  SELECT *
+  FROM `lofty-layout-385803.MDD.Metab` AS lc
+  WHERE lc.GenomicLocus NOT IN (SELECT GenomicLocus FROM MDD_loci)
+),
+
+-- Step 3: Run PheWAS analysis on the novel loci
+MDD_variants AS (
+  SELECT
+    nl.rsID,
+    variants.chr_id AS chr,
+    variants.position AS pos,
+    variants.ref_allele,
+    variants.alt_allele,
+    variants.rs_id
+  FROM
+    Novel_loci AS nl
+  JOIN
+    `bigquery-public-data.open_targets_genetics.variants` AS variants
+  ON nl.rsID = variants.rs_id
+),
+
+Filtered_vd AS (
+  SELECT DISTINCT
+    ov.rsID,
+    vd.trait_reported,
+    vd.pmid
+  FROM
+    MDD_variants AS ov
+  JOIN
+    `bigquery-public-data.open_targets_genetics.variant_disease` AS vd
+  ON (
+    (vd.lead_chrom = ov.chr AND vd.lead_pos = ov.pos AND vd.lead_ref = ov.ref_allele AND vd.lead_alt = ov.alt_allele) 
+    OR
+    (vd.tag_chrom = ov.chr AND vd.tag_pos = ov.pos AND vd.tag_ref = ov.ref_allele AND vd.tag_alt = ov.alt_allele)
+  )
+  WHERE
+    EXISTS (
+      SELECT 1
+      FROM UNNEST(vd.ancestry_initial.list) AS ancestry
+      WHERE LOWER(ancestry.element) LIKE 'european%'
+    )
+    AND vd.pval < 5e-8
+)
+
+-- Step 4: Return the final result of the PheWAS for novel loci
+SELECT *
+FROM Filtered_vd
+
+##################################################################################
+## Perform PheWAS on Metab-MDD loci previously uncharacterised for Metab traits ##
+##################################################################################
+
+-- Step 1: Identify Metab loci to exclude (known loci with metabolic traits)
+WITH Metab_loci AS (
+  SELECT DISTINCT lc.GenomicLocus
+  FROM
+    `bigquery-public-data.open_targets_genetics.variant_disease` AS vd
+  JOIN
+    `bigquery-public-data.open_targets_genetics.variants` AS variants
+  ON
+    CONCAT(vd.lead_chrom, '_', vd.lead_pos, '_', vd.lead_ref, '_', vd.lead_alt) = 
+    CONCAT(variants.chr_id, '_', variants.position, '_', variants.ref_allele, '_', variants.alt_allele)
+    OR
+    CONCAT(vd.tag_chrom, '_', vd.tag_pos, '_', vd.tag_ref, '_', vd.tag_alt) = 
+    CONCAT(variants.chr_id, '_', variants.position, '_', variants.ref_allele, '_', variants.alt_allele)
+  JOIN
+    `lofty-layout-385803.MDD.Metab` AS lc
+  ON
+    variants.position_b37 BETWEEN lc.start AND lc.end  
+    AND CAST(variants.chr_id_b37 AS STRING) = CAST(lc.chr AS STRING)
+  WHERE
+    (LOWER(vd.trait_reported) LIKE '%metabolic syndrome%'
+    OR LOWER(vd.trait_reported) LIKE '%triglyceride%'
+    OR LOWER(vd.trait_reported) LIKE '%high density lipoprotein%'
+    OR LOWER(vd.trait_reported) LIKE '%hdl%'
+    OR LOWER(vd.trait_reported) LIKE '%type 2 diabetes%'
+    OR LOWER(vd.trait_reported) LIKE '%gallstone%'
+    OR LOWER(vd.trait_reported) LIKE '%diabetes%'
+    OR LOWER(vd.trait_reported) LIKE '%cholelithiasis%')
+    AND EXISTS (
+      SELECT 1
+      FROM UNNEST(vd.ancestry_initial.list) AS ancestry
+      WHERE LOWER(ancestry.element) LIKE 'european%'
+    )
+),
+
+-- Step 2: Filter the original dataset to only include novel loci (excluding known Metab loci)
+
+Novel_loci AS (
+  SELECT *
+  FROM `lofty-layout-385803.MDD.Metab` AS lc
+  WHERE lc.GenomicLocus NOT IN (SELECT GenomicLocus FROM Metab_loci)
+),
+
+-- Step 3: Run PheWAS analysis on the novel loci
+Metab_variants AS (
+  SELECT
+    nl.rsID,
+    variants.chr_id AS chr,
+    variants.position AS pos,
+    variants.ref_allele,
+    variants.alt_allele,
+    variants.rs_id
+  FROM
+    Novel_loci AS nl
+  JOIN
+    `bigquery-public-data.open_targets_genetics.variants` AS variants
+  ON nl.rsID = variants.rs_id
+),
+
+Filtered_vd AS (
+  SELECT DISTINCT
+    ov.rsID,
+    vd.trait_reported,
+    vd.pmid
+  FROM
+    Metab_variants AS ov
+  JOIN
+    `bigquery-public-data.open_targets_genetics.variant_disease` AS vd
+  ON (
+    (vd.lead_chrom = ov.chr AND vd.lead_pos = ov.pos AND vd.lead_ref = ov.ref_allele AND vd.lead_alt = ov.alt_allele) 
+    OR
+    (vd.tag_chrom = ov.chr AND vd.tag_pos = ov.pos AND vd.tag_ref = ov.ref_allele AND vd.tag_alt = ov.alt_allele)
+  )
+  WHERE
+    EXISTS (
+      SELECT 1
+      FROM UNNEST(vd.ancestry_initial.list) AS ancestry
+      WHERE LOWER(ancestry.element) LIKE 'european%'
+    )
+    AND vd.pval < 5e-8
+)
+
+-- Step 4: Return the final result of the PheWAS for novel loci
+SELECT *
+FROM Filtered_vd
+
+     
+######################################################################################
+## Perform PheWAS on Metab-MDD unique loci (not seen in other second-order factors) ##
+######################################################################################
+
+WITH Metab_variants AS (
+  -- Step 1: Link rsID from MDD.Metab to the variants table
+  SELECT
+    lc.rsID,
+    variants.chr_id AS chr,
+    variants.position AS pos,
+    variants.ref_allele,
+    variants.alt_allele,
+    variants.rs_id
+  FROM
+    `lofty-layout-385803.MDD.Metab_Unique` AS lc
+  JOIN
+    `bigquery-public-data.open_targets_genetics.variants` AS variants
+  ON
+    lc.rsID = variants.rs_id  -- Linking by rsID 
+),
+-- Step 2: Link Overlap_variants to the variant_disease (vd) table by chromosome, position, and alleles
+Filtered_vd AS (
+  SELECT DISTINCT
+    ov.rsID,
+    vd.trait_reported,
+    vd.pmid
+  FROM
+    Metab_variants AS ov
+  JOIN
+    `bigquery-public-data.open_targets_genetics.variant_disease` AS vd
+  ON (
+    (vd.lead_chrom = ov.chr AND vd.lead_pos = ov.pos AND vd.lead_ref = ov.ref_allele AND vd.lead_alt = ov.alt_allele) 
+    OR
+    (vd.tag_chrom = ov.chr AND vd.tag_pos = ov.pos AND vd.tag_ref = ov.ref_allele AND vd.tag_alt = ov.alt_allele)
+  )
+  WHERE
+   EXISTS (
+      SELECT 1
+      FROM UNNEST(vd.ancestry_initial.list) AS ancestry
+      WHERE LOWER(ancestry.element) LIKE 'european%'
+    )
+    AND vd.pval < 5e-8  -- P-value threshold
+)
+-- Step 3: Return the final result
+SELECT * FROM Filtered_vd
+

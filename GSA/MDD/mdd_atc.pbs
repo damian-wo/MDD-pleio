@@ -1,0 +1,148 @@
+#!/bin/bash
+#PBS -N gsamixer       
+#PBS -l walltime=8:00:00 
+#PBS -l select=1:ncpus=8:mem=36GB  
+
+module load singularity/3.7.1 
+
+cd /mnt/lustre/working/lab_esked/damianWo/Chapter2/15_MIXER_GSA
+
+# custom path & settings
+export THREADS=8
+export MIXER_SIF=./singularity/gsa-mixer-2.1.1.sif
+export SUMSTATS_FOLDER=./MIXER_GSA/splitsumstats
+export SUMSTATS_FILE=MDD
+
+export OUT_FOLDER1=./MIXER_GSA/4_ATC_Level1
+export OUT_FOLDER2=./MIXER_GSA/4_ATC_Level2
+export OUT_FOLDER3=./MIXER_GSA/4_ATC_Level3
+export BASELINE_FOLDER=./MIXER_GSA/1_baseline
+
+# select which analyses to trigger
+export DO_MIXER=true
+export DO_MAGMA=true
+
+# standard GSA-MiXeR pipeline begins here 
+export PYTHON="singularity exec --home /software/gsa-mixer/gsa-mixer-2.1.1:/home ${MIXER_SIF} python"
+export MIXER_PY="$PYTHON /tools/mixer/precimed/mixer.py"
+export MAGMA="singularity exec --home /software/gsa-mixer/gsa-mixer-2.1.1:/home ${MIXER_SIF} magma"
+
+export MAGMA_BFILE=./MIXER_GSA/mixer/reference/ldsc/1000G_EUR_Phase3_plink/1000G.EUR.QC.merged
+export MAGMA_GENE_LOC=./MIXER_GSA/mixer/reference/magma/magma-gene-annot_10mar2023.csv
+export MAGMA_SET_ANNOT1=./MIXER_GSA/mixer/reference/magma/magma-geneset-atc1.csv
+export MAGMA_SET_ANNOT2=./MIXER_GSA/mixer/reference/magma/magma-geneset-atc2.csv
+export MAGMA_SET_ANNOT3=./MIXER_GSA/mixer/reference/magma/magma-geneset-atc3.csv
+
+export EXTRA_FLAGS="--seed 1000 --exclude-ranges MHC --hardprune-r2 0.6 --threads ${THREADS}"
+
+export REFERENCE_FOLDER=./MIXER_GSA/mixer/reference/magma
+export BIM_FILE=./MIXER_GSA/mixer/reference/ldsc/1000G_EUR_Phase3_plink/1000G.EUR.QC.@.bim
+export LOADLIB_FILE=./MIXER_GSA/mixer/reference/ldsc/1000G_EUR_Phase3_plink/1000G.EUR.QC.@.bin
+export ANNOT_FILE=./MIXER_GSA/mixer/reference/ldsc/1000G_EUR_Phase3_plink/baseline_v2.2_1000G.EUR.QC.@.annot.gz
+
+if ${DO_MIXER}; then
+
+# GSA-MiXeR analysis - enrichment model
+${MIXER_PY} plsa --gsa-full \
+        --trait1-file ${SUMSTATS_FOLDER}/${SUMSTATS_FILE}.chr@.sumstats.gz \
+        --out ${OUT_FOLDER1}/MDD_full \
+        --bim-file ${BIM_FILE} --use-complete-tag-indices --loadlib-file ${LOADLIB_FILE} \
+        --go-file ${REFERENCE_FOLDER}/gsa-mixer-gene-annot_10mar2023.csv \
+        --go-file-test ${REFERENCE_FOLDER}/gsa-mixer-atc1.tsv \
+        --annot-file ${ANNOT_FILE} \
+        --load-params-file ${BASELINE_FOLDER}/MDD_base.json \
+        ${EXTRA_FLAGS}
+
+fi
+
+if ${DO_MAGMA}; then
+
+# MAGMA analysis - annotate snps to genes
+$MAGMA --snp-loc ${MAGMA_BFILE}.bim \
+       --gene-loc ${MAGMA_GENE_LOC} \
+       --out ./4_ATC_Level1/MDD_magma.step1 \
+       --annotate window=10
+
+# MAGMA analysis - compute gene-level p-values
+$MAGMA --pval ./sumstats/MDD_clean.tsv snp-id=SNP pval=P ncol=N \
+       --bfile ${MAGMA_BFILE} \
+       --gene-annot ./4_ATC_Level1/MDD_magma.step1.genes.annot \
+       --out ./4_ATC_Level1/MDD_magma.step2
+
+# MAGMA analysis - compute geneset-level p-values
+$MAGMA --gene-results ./4_ATC_Level1/MDD_magma.step2.genes.raw \
+       --set-annot ${MAGMA_SET_ANNOT1} \
+       --out ./4_ATC_Level1/MDD_magma
+fi
+
+
+if ${DO_MIXER}; then
+
+# GSA-MiXeR analysis - enrichment model
+${MIXER_PY} plsa --gsa-full \
+        --trait1-file ${SUMSTATS_FOLDER}/${SUMSTATS_FILE}.chr@.sumstats.gz \
+        --out ${OUT_FOLDER2}/MDD_full \
+        --bim-file ${BIM_FILE} --use-complete-tag-indices --loadlib-file ${LOADLIB_FILE} \
+        --go-file ${REFERENCE_FOLDER}/gsa-mixer-gene-annot_10mar2023.csv \
+        --go-file-test ${REFERENCE_FOLDER}/gsa-mixer-atc2.tsv \
+        --annot-file ${ANNOT_FILE} \
+        --load-params-file ${BASELINE_FOLDER}/MDD_base.json \
+        ${EXTRA_FLAGS}
+
+fi
+
+if ${DO_MAGMA}; then
+
+# MAGMA analysis - annotate snps to genes
+$MAGMA --snp-loc ${MAGMA_BFILE}.bim \
+       --gene-loc ${MAGMA_GENE_LOC} \
+       --out ./4_ATC_Level2/MDD_magma.step1 \
+       --annotate window=10
+
+# MAGMA analysis - compute gene-level p-values
+$MAGMA --pval ./sumstats/MDD_clean.tsv snp-id=SNP pval=P ncol=N \
+       --bfile ${MAGMA_BFILE} \
+       --gene-annot ./4_ATC_Level2/MDD_magma.step1.genes.annot \
+       --out ./4_ATC_Level2/MDD_magma.step2
+
+# MAGMA analysis - compute geneset-level p-values
+$MAGMA --gene-results ./4_ATC_Level2/MDD_magma.step2.genes.raw \
+       --set-annot ${MAGMA_SET_ANNOT2} \
+       --out ./4_ATC_Level2/MDD_magma
+fi
+
+
+if ${DO_MIXER}; then
+
+# GSA-MiXeR analysis - enrichment model
+${MIXER_PY} plsa --gsa-full \
+        --trait1-file ${SUMSTATS_FOLDER}/${SUMSTATS_FILE}.chr@.sumstats.gz \
+        --out ${OUT_FOLDER3}/MDD_full \
+        --bim-file ${BIM_FILE} --use-complete-tag-indices --loadlib-file ${LOADLIB_FILE} \
+        --go-file ${REFERENCE_FOLDER}/gsa-mixer-gene-annot_10mar2023.csv \
+        --go-file-test ${REFERENCE_FOLDER}/gsa-mixer-atc3.tsv \
+        --annot-file ${ANNOT_FILE} \
+        --load-params-file ${BASELINE_FOLDER}/MDD_base.json \
+        ${EXTRA_FLAGS}
+
+fi
+
+if ${DO_MAGMA}; then
+
+# MAGMA analysis - annotate snps to genes
+$MAGMA --snp-loc ${MAGMA_BFILE}.bim \
+       --gene-loc ${MAGMA_GENE_LOC} \
+       --out ./4_ATC_Level3/MDD_magma.step1 \
+       --annotate window=10
+
+# MAGMA analysis - compute gene-level p-values
+$MAGMA --pval ./sumstats/MDD_clean.tsv snp-id=SNP pval=P ncol=N \
+       --bfile ${MAGMA_BFILE} \
+       --gene-annot ./4_ATC_Level3/MDD_magma.step1.genes.annot \
+       --out ./4_ATC_Level3/MDD_magma.step2
+
+# MAGMA analysis - compute geneset-level p-values
+$MAGMA --gene-results ./4_ATC_Level3/MDD_magma.step2.genes.raw \
+       --set-annot ${MAGMA_SET_ANNOT3} \
+       --out ./4_ATC_Level3/MDD_magma
+fi
