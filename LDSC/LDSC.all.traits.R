@@ -6,7 +6,7 @@ library(data.table)
 library(dplyr)
 
 ## Set working directory
-setwd("/mnt/lustre/working/lab_esked/damianWo/Chapter2/1_genomicSEM")
+setwd("/./1_genomicSEM")
 
 ## import all sumstat files 
 traits <- list.files(pattern = "*sumstats.gz$", recursive = TRUE)
@@ -51,10 +51,10 @@ population.prev <- c(
   0.001)
 
 ## The folder of LD scores
-ld <- "/mnt/lustre/working/lab_esked/damianWo/reference_files/eur_w_ld_chr/"
+ld <- "./reference_files/eur_w_ld_chr/"
 
 ## The folder of LD weights
-wld <- "/mnt/lustre/working/lab_esked/damianWo/reference_files/eur_w_ld_chr/"
+wld <- ".reference_files/eur_w_ld_chr/"
 
 ## Create vector for trait names 
 trait.names <- sub(".sumstats\\.gz$", "", basename(traits))
@@ -62,4 +62,4 @@ trait.names <- sub(".sumstats\\.gz$", "", basename(traits))
 ## Run LDSC
 LDSCoutput <- ldsc(traits=traits,sample.prev=sample.prev,population.prev=population.prev,ld=ld,wld=wld,trait.names=trait.names)
 
-save(LDSCoutput,file="LDSCoutput_all.traits5.RData")
+save(LDSCoutput,file="LDSCoutput_all.traits.RData")
